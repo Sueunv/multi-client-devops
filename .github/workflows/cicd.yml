@@ -1,0 +1,62 @@
+name: Multi-Client CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - stage
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Configure AWS credentials
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # Login to ECR
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # -------------------------
+      # Build & Push Client A
+      # -------------------------
+      - name: Build Client A image
+        run: |
+          docker build -t $ECR_REGISTRY/client-a-node:$IMAGE_TAG ./apps/client-a-node
+          docker push $ECR_REGISTRY/client-a-node:$IMAGE_TAG
+
+      # -------------------------
+      # Build & Push Client B
+      # -------------------------
+      - name: Build Client B image
+        run: |
+          docker build -t $ECR_REGISTRY/client-b-python:$IMAGE_TAG ./apps/client-b-python
+          docker push $ECR_REGISTRY/client-b-python:$IMAGE_TAG
+
+      # -------------------------
+      # Deploy to Swarm
+      # -------------------------
+      - name: Deploy to Docker Swarm
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker service update --image $ECR_REGISTRY/client-a-node:$IMAGE_TAG multi-client-devops_client-a
+            docker service update --image $ECR_REGISTRY/client-b-python:$IMAGE_TAG multi-client-devops_client-b
