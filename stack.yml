@@ -1,0 +1,92 @@
+version: "3.9"
+
+services:
+
+  traefik:
+    image: traefik:v2.11
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.endpoint=unix:///var/run/docker.sock"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=multi-client-network"
+      - "--entrypoints.web.address=:80"
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      placement:
+        constraints:
+          - node.role==manager
+    networks:
+      - multi-client-network
+
+  client-a:
+    image: 072288671747.dkr.ecr.ap-south-1.amazonaws.com/client-a-node:1.0
+    secrets:
+      - db_password
+    configs:
+      - source: client_a_env
+        target: /app/.env
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 10s
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.client-a.rule=Host(`client-a.local`)"
+        - "traefik.http.routers.client-a.entrypoints=web"
+        - "traefik.http.services.client-a.loadbalancer.server.port=3000"
+    networks:
+      - multi-client-network
+
+  client-b:
+    image: 072288671747.dkr.ecr.ap-south-1.amazonaws.com/client-b-python:1.1
+    secrets:
+      - db_password
+    configs:
+      - source: client_b_env
+        target: /app/.env
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 10s
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.client-b.rule=Host(`client-b.local`)"
+        - "traefik.http.routers.client-b.entrypoints=web"
+        - "traefik.http.services.client-b.loadbalancer.server.port=8000"
+    networks:
+      - multi-client-network
+
+networks:
+  multi-client-network:
+    external: true
+
+secrets:
+  db_password:
+    external: true
+
+configs:
+  client_a_env:
+    external: true
+  client_b_env:
+    external: true
