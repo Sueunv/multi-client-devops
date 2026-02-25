@@ -1,4 +1,4 @@
-name: Multi-Client CI/CD Pipeline
+name: Multi-Client CI/CD Pipeline (Debug Version)
 
 on:
   push:
@@ -17,10 +17,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # -------------------------
+      # Checkout
+      # -------------------------
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Configure AWS credentials
+      # -------------------------
+      # Debug Secrets (SAFE)
+      # -------------------------
+      - name: Debug secret presence
+        run: |
+          echo "Checking if secrets are set..."
+
+          if [ -z "${{ secrets.EC2_USER }}" ]; then
+            echo "EC2_USER is EMPTY ❌"
+          else
+            echo "EC2_USER is SET ✅"
+          fi
+
+          if [ -z "${{ secrets.EC2_HOST }}" ]; then
+            echo "EC2_HOST is EMPTY ❌"
+          else
+            echo "EC2_HOST is SET ✅"
+          fi
+
+          if [ -z "${{ secrets.EC2_SSH_KEY }}" ]; then
+            echo "EC2_SSH_KEY is EMPTY ❌"
+          else
+            echo "EC2_SSH_KEY is SET ✅"
+          fi
+
+      # -------------------------
+      # Configure AWS
+      # -------------------------
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -28,7 +58,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # -------------------------
       # Login to ECR
+      # -------------------------
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
@@ -47,6 +79,20 @@ jobs:
         run: |
           docker build -t $ECR_REGISTRY/client-b-python:$IMAGE_TAG ./apps/client-b-python
           docker push $ECR_REGISTRY/client-b-python:$IMAGE_TAG
+
+      # -------------------------
+      # Test Raw SSH Connection First
+      # -------------------------
+      - name: Test SSH Connection
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "SSH connection successful ✅"
+            whoami
+            hostname
 
       # -------------------------
       # Deploy to Swarm
