@@ -11,30 +11,28 @@ concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-  STACK_NAME: multi-client-stack
-
 jobs:
   build-and-deploy:
-    name: Build & Deploy to Swarm
+    name: Build and Deploy to Docker Swarm
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
 
     steps:
+      # Checkout repository
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Derive image tag
-        id: vars
+      # Create short SHA tag
+      - name: Generate image tag
         run: |
           SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
-          echo "IMAGE_TAG=${SHORT_SHA}" >> $GITHUB_ENV
-          echo "Using image tag: ${SHORT_SHA}"
+          echo "IMAGE_TAG=$SHORT_SHA" >> $GITHUB_ENV
+          echo "Using image tag: $SHORT_SHA"
 
+      # Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -42,10 +40,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # Login to Amazon ECR
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build & Push Client A
+      # Build & Push Client A
+      - name: Build and push Client A
         run: |
           IMAGE_A=$ECR_REGISTRY/client-a-node:$IMAGE_TAG
           docker build \
@@ -55,7 +55,8 @@ jobs:
 
           docker push $IMAGE_A
 
-      - name: Build & Push Client B
+      # Build & Push Client B
+      - name: Build and push Client B
         run: |
           IMAGE_B=$ECR_REGISTRY/client-b-python:$IMAGE_TAG
           docker build \
@@ -65,22 +66,23 @@ jobs:
 
           docker push $IMAGE_B
 
-      - name: Deploy stack on Swarm manager
+      # Deploy to Swarm
+      - name: Deploy stack to Swarm manager
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          envs: IMAGE_TAG,ECR_REGISTRY
           script: |
             set -e
+
+            STACK_NAME="multi-client-stack"
 
             echo "Deploying stack: $STACK_NAME"
             echo "Image tag: $IMAGE_TAG"
 
-            export IMAGE_TAG=$IMAGE_TAG
-            export ECR_REGISTRY=$ECR_REGISTRY
-
             docker stack deploy -c stack.yml $STACK_NAME
 
-            echo "Deployment status:"
+            echo "Stack status:"
             docker stack services $STACK_NAME
