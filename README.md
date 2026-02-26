@@ -106,7 +106,7 @@ deploy:
   update_config:
     parallelism: 1
     delay: 10s
-
+```
 
 What This Ensures
 
@@ -121,7 +121,6 @@ Traefik is used as a dynamic reverse proxy.
 Routing rules:
 
 client-a.example.com → Node service
-
 client-b.example.com → Python service
 
 Why Traefik?
@@ -163,7 +162,7 @@ Pipeline Flow:
 3.Build Docker images
 4.Push to AWS ECR
 5.SSH into Swarm manager
-6. Deploy updated stack
+6.Deploy updated stack
 
 Images are tagged as:
 client-a-node:<short-sha>
@@ -182,19 +181,15 @@ As the number of onboarded clients increases, the architecture must move from a 
 If 20 new clients are added monthly, here is how I would approach it:
 
 1. Networking Strategy
-
-I would use 
-
-1. Networking Strategy
 I would use a shared Swarm cluster with logical isolation per client.
 
 Approach:
 Each client gets its own stack:
-
+```
 client-a-stack
 client-b-stack
 client-c-stack
-
+```
 - Each stack runs inside its own overlay network.
 - Internal service discovery remains isolated within that network.
 - Reverse proxy (Traefik) routes based on domain/subdomain.
@@ -213,10 +208,10 @@ I avoid using latest.
 Instead:
 - Images are tagged with commit SHA
 - Optionally versioned like:
-
+```
 client-a:1.2.4
 client-a:<commit-sha>
-
+```
 Why?
 
 * Immutable deployments
@@ -250,9 +245,10 @@ Scaling happens at multiple levels:
 - Application Scaling
 
 Each service:
+```
 deploy:
   replicas: 3
-
+```
 We can increase replicas per client independently:
 docker service scale client-a=5
 
@@ -273,13 +269,15 @@ Placement Constraints
 For high-value clients:
 
 Use node labels:
+```
 docker node update --label-add tier=enterprise node-2
-
+```
 Then in stack 
+```
 placement:
   constraints:
     - node.labels.tier == enterprise
-
+```
 This ensures:
 * Dedicated compute resources
 * Premium client isolation
@@ -357,9 +355,9 @@ Early issue detection
 
 2. Healthchecks
 Each service defines:
-
+```
 HEALTHCHECK CMD curl --fail http://localhost:3000/health || exit 1
-
+```
 Swarm:
 Detects unhealthy containers
 Restarts automatically
